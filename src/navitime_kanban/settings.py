@@ -21,6 +21,8 @@ SECRET_KEY = 'django-insecure-замените-на-свой-ключ-в-про�
 DEBUG = True
 ALLOWED_HOSTS = []
 
+AUTH_USER_MODEL = 'kanban.User'
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
