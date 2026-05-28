@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'drf_spectacular',
-    'api_v1.apps.ApiV1Config',
+    'api_v1',
 ]
 
 MIDDLEWARE = [
@@ -157,8 +157,8 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Library API',
-    'DESCRIPTION': 'API для Kanban доски',
+    'TITLE': 'NaviTime API',
+    'DESCRIPTION': 'API для NaviTime Kanban доски',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }
