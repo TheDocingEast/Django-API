@@ -37,7 +37,7 @@ src/
 ### 1. Клонировать репозиторий
 
 ```bash
-git clone <url>
+git clone https://github.com/TheDocingEast/Django-API.git
 cd Django-API
 ```
 
