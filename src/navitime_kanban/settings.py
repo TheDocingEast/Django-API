@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os
 import dotenv
+from datetime import timedelta
+
 
 dotenv.load_dotenv()
 
@@ -85,6 +87,13 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
+
+SIMPLE_JWT = {
+    'USER_ID_FIELD': 'user_id',      # имя PK в нашей модели
+    'USER_ID_CLAIM': 'user_id',      # имя claim внутри токена
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+}
 
 LANGUAGE_CODE = 'ru-ru'
 TIME_ZONE = 'UTC'
