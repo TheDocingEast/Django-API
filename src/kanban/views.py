@@ -113,41 +113,33 @@ class StatusViewSet(viewsets.ModelViewSet):
         return super().retrieve(request, *args, **kwargs)
 
 
-# ── TaskViewSet ──────────────────────────────────────────────────────────────
+
 class TaskViewSet(viewsets.ModelViewSet):
-    """Управление задачами Kanban-доски.
-
-    Сценарии 2, 3, 4, 6, 8, 9:
-    - GET /tasks/ — задачи текущего рабочего пространства (is_deleted=0).
-    - GET /tasks/?workspace_id=X — мониторинг другого пространства (manager).
-    - POST — создание задачи (creator_id = текущий пользователь).
-    - PATCH — изменение статуса (Drag-and-Drop, сценарий 4).
-    - DELETE — мягкое удаление is_deleted=1 (сценарий 9).
-    - PATCH /tasks/{id}/mark_irrelevant/ — пометить как неактуальную (сценарий 6).
-    Фильтрация: workspace_id, status_id, assignee_id, priority.
-    """
-
     serializer_class = TaskSerializer
+    # Убираем фильтр отсюда — он должен быть только в get_queryset
     queryset = Task.objects.select_related(
         'workspace', 'status', 'assignee', 'creator'
-    ).filter(is_deleted=False)
+    ).all()
     permission_classes = [IsAuthenticatedReadOrManagerWrite]
 
     def get_queryset(self):
-        """Фильтрация задач. Сотрудник видит только свой отдел."""
-        qs = super().get_queryset()
+        # Все запросы, включая retrieve/update/destroy, идут через этот метод
+        qs = Task.objects.select_related(
+            'workspace', 'status', 'assignee', 'creator'
+        ).filter(is_deleted=False)
+
         user = self.request.user
-
         workspace_id = self.request.query_params.get('workspace_id')
-        status_id = self.request.query_params.get('status_id')
-        assignee_id = self.request.query_params.get('assignee_id')
-        priority = self.request.query_params.get('priority')
+        status_id    = self.request.query_params.get('status_id')
+        assignee_id  = self.request.query_params.get('assignee_id')
+        priority     = self.request.query_params.get('priority')
+        creator_id   = self.request.query_params.get('creator_id')
 
-        if workspace_id and user.role in ('manager', 'admin'):
-            # Сценарий 7: Начальник переключает пространства
+        if self.action in ('retrieve', 'update', 'partial_update', 'destroy'):
+            pass  # не фильтруем по workspace, объект ищется по pk
+        elif workspace_id and user.role in ('manager', 'admin'):
             qs = qs.filter(workspace_id=workspace_id)
         else:
-            # Сценарий 2: Сотрудник видит только свой отдел
             qs = qs.filter(workspace_id=user.workspace_id)
 
         if status_id:
@@ -156,97 +148,13 @@ class TaskViewSet(viewsets.ModelViewSet):
             qs = qs.filter(assignee_id=assignee_id)
         if priority:
             qs = qs.filter(priority=priority)
+        if creator_id:
+            qs = qs.filter(creator_id=creator_id)
 
         return qs
 
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
-
-    @cache_response(60 * 5)
-    def retrieve(self, request, *args, **kwargs):
-        """Сценарий 3: детальный просмотр карточки задачи (кешируем на 5 минут)."""
-        return super().retrieve(request, *args, **kwargs)
-
     def perform_create(self, serializer):
-        """Сценарий 8: при создании задачи creator = текущий пользователь."""
         serializer.save(creator=self.request.user)
-
-    def create(self, request, *args, **kwargs):
-        """POST — создание одной или нескольких задач (сценарий 8)."""
-        many = isinstance(request.data, list)
-        serializer = self.get_serializer(data=request.data, many=many)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
-    def update(self, request, *args, **kwargs):
-        """PUT — полное обновление задачи (включая смену статуса, сценарий 4)."""
-        many = isinstance(request.data, list)
-        if many:
-            instances = [Task.objects.get(pk=item['task_id']) for item in request.data]
-            serializer = self.get_serializer(instances, data=request.data, many=True)
-        else:
-            instance = self.get_object()
-            serializer = self.get_serializer(instance, data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response(serializer.data)
-
-    def partial_update(self, request, *args, **kwargs):
-        """PATCH — частичное обновление (Drag-and-Drop: меняем только status_id, сценарий 4)."""
-        many = isinstance(request.data, list)
-        if many:
-            instances = [Task.objects.get(pk=item['task_id']) for item in request.data]
-            serializer = self.get_serializer(instances, data=request.data, partial=True, many=True)
-        else:
-            instance = self.get_object()
-            serializer = self.get_serializer(instance, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response(serializer.data)
-
-    def destroy(self, request, *args, **kwargs):
-        """DELETE — мягкое удаление: is_deleted=1. Физически запись остаётся в БД (сценарий 9)."""
-        ids = request.query_params.get('ids')
-        if ids:
-            # Массовое мягкое удаление через ?ids=1,2,3
-            ids_list = [int(pk) for pk in ids.split(',')]
-            Task.objects.filter(pk__in=ids_list).update(is_deleted=True)
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        # Одиночное мягкое удаление
-        instance = self.get_object()
-        instance.is_deleted = True
-        instance.save(update_fields=['is_deleted'])
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-    @action(detail=True, methods=['patch'], url_path='mark_irrelevant')
-    def mark_irrelevant(self, request, pk=None):
-        """PATCH /api/v1/tasks/{id}/mark_irrelevant/ — пометить задачу как неактуальную.
-
-        Сценарий 6: задача не удаляется физически, статус меняется на «неактуально».
-        Начальник должен получить уведомление (здесь — заготовка, логику уведомлений
-        расширить при необходимости).
-        """
-        task = self.get_object()
-        # Ищем статус «неактуально» / «Irrelevant» в пространстве задачи
-        irrelevant_status = Status.objects.filter(
-            workspace_id=task.workspace_id,
-            name__icontains='неактуал',
-        ).first()
-
-        if not irrelevant_status:
-            return Response(
-                {'detail': 'Статус «Неактуально» не найден в данном рабочем пространстве.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        task.status = irrelevant_status
-        task.save(update_fields=['status', 'updated_at'])
-        return Response(
-            {'detail': 'Задача помечена как неактуальная.', 'task_id': task.pk}
-        )
-
 
 # ── CommentViewSet ───────────────────────────────────────────────────────────
 class CommentViewSet(viewsets.ModelViewSet):

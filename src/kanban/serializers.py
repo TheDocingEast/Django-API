@@ -104,7 +104,7 @@ class TaskSerializer(serializers.ModelSerializer):
             'creator',
             'priority', 'deadline', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['task_id', 'creator', 'created_at', 'updated_at']
+        read_only_fields = ['task_id', 'created_at', 'updated_at']
 
 class CommentSerializer(serializers.ModelSerializer):
     """Сериализатор комментария.
@@ -118,6 +118,7 @@ class CommentSerializer(serializers.ModelSerializer):
         queryset=Task.objects.filter(is_deleted=False), source='task', write_only=True,
     )
     task = serializers.StringRelatedField(read_only=True)
+    creator = UserSerializer(read_only=True)
 
     class Meta:
         model = Comment

@@ -10,6 +10,7 @@ class Workspace(models.Model):
 
     class Meta:
         db_table = 'workspaces'
+        ordering = ['workspace_id']
         verbose_name = 'Рабочее пространство'
         verbose_name_plural = 'Рабочие пространства'
 
@@ -153,6 +154,7 @@ class Task(models.Model):
     is_deleted = models.BooleanField(default=False, verbose_name='Удалена (мягко)')
 
     class Meta:
+        ordering = ['workspace_id']
         db_table = 'tasks'
         verbose_name = 'Задача'
         verbose_name_plural = 'Задачи'
